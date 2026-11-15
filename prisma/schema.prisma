@@ -1,0 +1,253 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MealType {
+  breakfast
+  lunch
+  dinner
+}
+
+enum Difficulty {
+  easy
+  medium
+  hard
+}
+
+enum DietType {
+  omnivore
+  vegetarian
+  vegan
+}
+
+enum ReminderChannel {
+  push
+  email
+  both
+}
+
+enum FunMessageContext {
+  wheel
+  budget_cheap
+  budget_good
+  streak
+  healthy
+}
+
+model User {
+  id                String             @id @default(uuid())
+  email             String             @unique
+  name              String
+  avatarUrl         String?
+  googleId          String?            @unique
+  createdAt         DateTime           @default(now())
+  preferences       UserPreference?
+  fridgeItems       FridgeItem[]
+  favoriteRecipes   FavoriteRecipe[]
+  mealLogs          MealLog[]
+  reminders         Reminder[]
+  pushSubscriptions PushSubscription[]
+  streak            Streak?
+  shoppingLists     ShoppingList[]
+}
+
+model UserPreference {
+  id                     String   @id @default(uuid())
+  userId                 String   @unique
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dietType               DietType @default(omnivore)
+  spiceLevel             Int      @default(1)
+  dislikedIngredientIds  String[] @default([])
+  calorieGoal            Int?
+  proteinGoal            Int?
+  defaultBudget          Int?
+  healthyMaxKcal         Int      @default(600)
+  healthyMinProtein      Int      @default(15)
+  updatedAt              DateTime @updatedAt
+}
+
+model Ingredient {
+  id                String             @id @default(uuid())
+  name              String             @unique
+  aliases           String[]           @default([])
+  category          String
+  unit              String
+  pricePerUnit      Int
+  gramsPerUnit      Float              @default(100)
+  kcal              Float
+  protein           Float
+  carbs             Float
+  fat               Float
+  createdAt         DateTime           @default(now())
+  recipeIngredients RecipeIngredient[]
+  fridgeItems       FridgeItem[]
+  shoppingItems     ShoppingItem[]
+
+  @@index([category])
+}
+
+model Recipe {
+  id            String             @id @default(uuid())
+  title         String
+  imageUrl      String?
+  cookMinutes   Int
+  difficulty    Difficulty         @default(easy)
+  tools         String[]           @default([])
+  steps         Json
+  servings      Int                @default(1)
+  costEstimate  Int
+  kcal          Float
+  protein       Float
+  carbs         Float
+  fat           Float
+  mealTypes     MealType[]
+  dietTypes     DietType[]         @default([omnivore])
+  spiceLevel    Int                @default(1)
+  isHealthy     Boolean            @default(false)
+  createdAt     DateTime           @default(now())
+  ingredients   RecipeIngredient[]
+  favoriteBy    FavoriteRecipe[]
+  mealLogs      MealLog[]
+
+  @@index([cookMinutes, costEstimate])
+  @@index([isHealthy])
+}
+
+model RecipeIngredient {
+  id           String     @id @default(uuid())
+  recipeId     String
+  ingredientId String
+  quantity     Float
+  isMain       Boolean    @default(false)
+  recipe       Recipe     @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+
+  @@unique([recipeId, ingredientId])
+  @@index([ingredientId])
+}
+
+model FridgeItem {
+  id           String     @id @default(uuid())
+  userId       String
+  ingredientId String
+  quantity     Float
+  addedAt      DateTime   @default(now())
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, ingredientId])
+  @@index([userId])
+}
+
+model FavoriteRecipe {
+  id        String   @id @default(uuid())
+  userId    String
+  recipeId  String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe    Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, recipeId])
+  @@index([userId])
+  @@index([recipeId])
+}
+
+model MealLog {
+  id          String   @id @default(uuid())
+  userId      String
+  recipeId    String?
+  recipeTitle String?
+  mealType    MealType
+  eatenAt     DateTime @default(now())
+  cost        Int      @default(0)
+  kcal        Float    @default(0)
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe      Recipe?  @relation(fields: [recipeId], references: [id], onDelete: SetNull)
+
+  @@index([userId, eatenAt])
+  @@index([userId, mealType, eatenAt])
+  @@index([recipeId])
+}
+
+model Reminder {
+  id          String          @id @default(uuid())
+  userId      String
+  mealType    MealType
+  timeOfDay   String
+  channel     ReminderChannel @default(push)
+  enabled     Boolean         @default(true)
+  lastSentAt  DateTime?
+  secondSentAt DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mealType])
+  @@index([timeOfDay, enabled])
+  @@index([userId])
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  endpoint  String   @unique
+  keys      Json
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Streak {
+  userId        String   @id
+  currentStreak Int      @default(0)
+  longestStreak Int      @default(0)
+  lastDate      String?
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([currentStreak])
+}
+
+model FunMessage {
+  id      String           @id @default(uuid())
+  context FunMessageContext
+  text    String
+  author  String           @default("BếpSV")
+  createdAt DateTime       @default(now())
+
+  @@index([context])
+}
+
+model ShoppingList {
+  id        String         @id @default(uuid())
+  userId    String
+  createdAt DateTime       @default(now())
+  totalCost Int            @default(0)
+  budget    Int?
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     ShoppingItem[]
+
+  @@index([userId, createdAt])
+}
+
+model ShoppingItem {
+  id           String       @id @default(uuid())
+  listId       String
+  ingredientId String
+  quantity     Float
+  estPrice     Int          @default(0)
+  isBought     Boolean      @default(false)
+  list         ShoppingList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient   @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+
+  @@unique([listId, ingredientId])
+  @@index([listId])
+  @@index([ingredientId])
+}
